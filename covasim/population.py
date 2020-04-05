@@ -1,7 +1,8 @@
 import numpy as np  # Needed for a few things not provided by pl
 import sciris as sc
 from . import utils as cvu
-from .person import Person
+from . import person as cvper
+from . import parameters as cvpars
 
 
 class Population(sc.prettyobj):
@@ -85,7 +86,7 @@ class Population(sc.prettyobj):
         ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(n_people)  # Uniformly distribute within this age bin
 
         # Instantiate people
-        self.people = {uid: Person(pars=pars, uid=uid, age=age, sex=sex) for uid, age, sex in zip(uids, ages, sexes)}
+        self.people = {uid: cvper.Person(pars=pars, uid=uid, age=age, sex=sex) for uid, age, sex in zip(uids, ages, sexes)}
         self._uids = {i: x.uid for i, x in enumerate(self.people.values())}
 
         # Make contacts

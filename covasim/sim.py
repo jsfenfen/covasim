@@ -215,10 +215,10 @@ class Sim(cvbase.BaseSim):
 
         sc.printv(f'Creating {self["n"]} people...', 1, verbose)
 
-        if self['population'] is None:
+        if self.population is None:
             # Make a random network
             print('Input parameters did not contain a population - creating a random network')
-            self['population'] = cvpop.Population.random(pars=self.pars, **kwargs)
+            self.population = cvpop.Population.random(pars=self.pars, **kwargs)
 
         # Create the seed infections
         for i in range(int(self['n_infected'])):
@@ -233,7 +233,7 @@ class Sim(cvbase.BaseSim):
 
     def save_population(self, filename, *args, **kwargs):
         self.population.save(filename, *args, **kwargs)
-        return 
+        return
 
     def next(self, steps=None, stop=None, initialize=False, finalize=False, verbose=0, **kwargs):
         '''
