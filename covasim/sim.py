@@ -49,23 +49,20 @@ class Sim(cvbase.BaseSim):
         filename (str): the filename for this simulation, if it's saved (default: creation date)
     '''
 
-    def __init__(self, pars=None, datafile=None, datacols=None, filename=None):
-        default_pars = cvpars.make_pars()  # Start with default pars
-        super().__init__(default_pars)  # Initialize and set the parameters as attributes
-        self.set_metadata(filename)  # Set the simulation date and filename
-        self.load_data(datafile, datacols)  # Load the data, if provided
-        self.update_pars(sc.dcp(pars))  # Update the parameters, if provided. Use deep copy so that the people/contact layers in the parameters don't interact if the parameters are used for multiple sims
-
-        if self['population'] is None:
-            # Make a random network
-            print('Input parameters did not contain a population - creating a random network')
-            self['population'] = cvpop.Population.random(pars=self.pars)
-
+    def __init__(self, pars=None, population=None, datafile=None, datacols=None, filename=None):
+        default_pars = cvpars.make_pars() # Start with default pars
+        super().__init__(default_pars) # Initialize and set the parameters as attributes
+        self.set_metadata(filename) # Set the simulation date and filename
+        self.load_data(datafile, datacols) # Load the data, if provided
+        self.update_pars(pars) # Update the parameters, if provided
         self.initialized = False
-        self.stopped = None  # If the simulation has stopped
-        self.results_ready = False  # Whether or not results are ready
+        self.stopped = None # If the simulation has stopped
+        self.results_ready = False # Whether or not results are ready
+        self.population = None
+        self.people = {} # Initialize these here so methods that check their length can see they're empty
         self.results = {}
         return
+
 
     def set_metadata(self, filename):
         ''' Set the metadata for the simulation -- creation time and filename '''
@@ -86,6 +83,36 @@ class Sim(cvbase.BaseSim):
             self.data = None
         return
 
+
+    def load_population(self, filename, **kwargs):
+        '''
+        Load the population dictionary from file.
+
+        Args:
+            filename (str): name of the file to load.
+        '''
+        filepath = sc.makefilepath(filename=filename, **kwargs)
+        self.population = sc.loadobj(filepath)
+        n_actual = len(self.population['uid'])
+        n_expected = self['n']
+        if n_actual != n_expected:
+            errormsg = f'Wrong number of people ({n_expected} requested, {n_actual} actual) -- please change "n" to match or regenerate the file'
+            raise ValueError(errormsg)
+        return
+
+
+    def save_population(self, filename, **kwargs):
+        '''
+        Save the population dictionary to file.
+
+        Args:
+            filename (str): name of the file to save to.
+        '''
+        filepath = sc.makefilepath(filename=filename, **kwargs)
+        sc.saveobj(filepath, self.population)
+        return filepath
+
+
     def initialize(self, **kwargs):
         '''
         Perform all initializations.
@@ -96,8 +123,8 @@ class Sim(cvbase.BaseSim):
         self.t = None # The current time index
         self.validate_pars() # Ensure parameters have valid values
         self.set_seed() # Reset the random seed
-        self.init_people() # Create the results stucture
         self.init_results() # Create the results stucture
+        self.init_population(**kwargs) # Create all the people (slow)
         self.initialized = True
         return
 
@@ -168,6 +195,7 @@ class Sim(cvbase.BaseSim):
 
         return
 
+
     @property
     def reskeys(self):
         ''' Get the actual results objects, not other things stored in sim.results '''
@@ -178,26 +206,34 @@ class Sim(cvbase.BaseSim):
                 res_keys.append(key)
         return res_keys
 
-    @property
-    def people(self):
-        return self['population'].people
 
+    def init_population(self, verbose=None, id_len=None, **kwargs):
+        ''' Create the population '''
 
-    def get_person(self, *args, **kwargs):
-        return self['population'].get_person(*args, **kwargs)
+        if verbose is None:
+            verbose = self['verbose']
 
-    def init_people(self):
-        ''' Seed infections '''
+        sc.printv(f'Creating {self["n"]} people...', 1, verbose)
+
+        if self['population'] is None:
+            # Make a random network
+            print('Input parameters did not contain a population - creating a random network')
+            self['population'] = cvpop.Population.random(pars=self.pars, **kwargs)
+
+        # Create the seed infections
         for i in range(int(self['n_infected'])):
-            person = self['population'].get_person(i)
+            person = self.get_person(i)
             person.infect(t=0)
+
         return
 
     def load_population(self, filename, *args, **kwargs):
-        self['population'] = cvpop.Population.load(filename, *args, **kwargs)
+        self.population = cvpop.Population.load(filename, *args, **kwargs)
+        return
 
     def save_population(self, filename, *args, **kwargs):
-        self['population'].save(filename, *args, **kwargs)
+        self.population.save(filename, *args, **kwargs)
+        return 
 
     def next(self, steps=None, stop=None, initialize=False, finalize=False, verbose=0, **kwargs):
         '''
@@ -347,13 +383,13 @@ class Sim(cvbase.BaseSim):
                                    (diag_factor if person.diagnosed else 1.) * \
                                    (cont_factor if person.known_contact else 1.)
 
-                        for layer in self['population'].contact_layers.values():
+                        for layer in self.population.layers.values():
                             contacts = layer.get_contacts(person, t)
                             layer_beta = thisbeta * layer.beta
                             transmission_inds = cvu.bf(layer_beta, contacts)
 
                             for contact_ind in transmission_inds:
-                                target_person = self['population'].get_person(contact_ind)  # Stored by integer
+                                target_person = self.get_person(contact_ind)  # Stored by integer
 
                                 # This person was diagnosed last time step: time to flag their contacts
                                 if person.date_diagnosed is not None and person.date_diagnosed == t-1 and layer.traceable:
@@ -420,6 +456,7 @@ class Sim(cvbase.BaseSim):
 
         # Convert results to an objdict to allow e.g. sim.results.diagnoses
         # Access people by index using `Sim.get_person(25)`
+        # self.people = sc.odict(self.people)
         self.results = sc.objdict(self.results)
         self.results_ready = True
 
