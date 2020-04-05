@@ -212,7 +212,7 @@ class Person(sc.prettyobj):
             return 0
 
 
-def make_people(sim, verbose=None, id_len=None, die=True, reset=False):
+def make_people(sim, verbose=None, id_len=None, die=True, reset=False, prog_pars=None):
     '''
     Make the actual people for the simulation.
 
@@ -281,7 +281,7 @@ def make_people(sim, verbose=None, id_len=None, die=True, reset=False):
             popdict['contacts'] = contacts
 
     # Set prognoses by modifying popdict in place
-    set_prognoses(sim, popdict)
+    set_prognoses(sim, popdict, prog_pars=prog_pars)
 
     # Actually create the people
     people = {} # Dictionary for storing the people -- use plain dict since faster than odict
@@ -365,7 +365,7 @@ def make_randpop(sim, id_len=6):
 
 
 
-def set_prognoses(sim, popdict):
+def set_prognoses(sim, popdict, prog_pars=None):
     '''
     Determine the prognosis of an infected person: probability of being aymptomatic, or if symptoms develop, probability
     of developing severe symptoms and dying, based on their age
@@ -377,7 +377,8 @@ def set_prognoses(sim, popdict):
     n = len(ages)
     prognoses = sc.objdict()
 
-    prog_pars = cvpars.get_default_prognoses(by_age=by_age)
+    if not prog_pars:
+        prog_pars = cvpars.get_default_prognoses(by_age=by_age)
 
     # If not by age, same value for everyone
     if not by_age:
